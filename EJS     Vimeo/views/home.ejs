@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vimeo Upload</title>
+  <link id="icon" rel="icon" href="i-camp-logo-jpg.jpg" type="image/jpeg">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <div id="NavBar-Wrapper">
+    <div id="NavBar-Title">Vimeo Upload</div>
+  </div>
+  <div id="container">
+    <div id="sub-container">
+      <div id="uploadForm" enctype="multipart/form-data">
+        <div>
+          <input type="file" id="videoFile" accept="video/*" required />
+          <div id="progressContainer" class="progressBarContainer">
+            <div id="progressBar" class="progressBar" style="width: 0px;">0%</div>
+          </div>
+          <button class="upload-button" type="button" onclick="uploadVideo()">Upload</button>
+        </div>
+        <div>
+          <textarea id="myTextarea" placeholder="Enter Description"></textarea>
+        </div>
+        <div id="date-div"></div>
+          <input type="date" id="date" />
+        </div>
+        <button class="submit-button" type="button" onclick="StoreInDB()">Submit</button>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@2.0.0/dist/tus.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+  <script>
+    var uploadprogress = false
+    var percentage
+    var uploadCompleted = false
+    var upload
+    var videoUrl
+    var filename
+
+    const progressBarFunction = () => {
+      var conditionalContent = document.getElementById('progressContainer');
+      if (uploadprogress) {
+        conditionalContent.style.display = 'block';
+      } else {
+        conditionalContent.style.display = 'none';
+      }
+    }
+    progressBarFunction()
+
+    const uploadVideo = async (eventObject) => {
+      const ACCESS_TOKEN = '<%= env.ACCESS_TOKEN %>'
+      const headerPost = {
+        Accept: "application/vnd.vimeo.*+json;version=3.4",
+        Authorization: `bearer ${ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      };
+      var fileInput = document.getElementById('videoFile');
+      var file = fileInput.files[0];
+      if (
+        !file ||
+        !file.type.startsWith("video/") ||
+        !["video/mp4", "video/webm"].includes(file.type.toLowerCase())
+      ) {
+        alert("Please select a valid video file (MP4 or WebM).");
+        return;
+      }
+      var fileName = file.name;
+      var fileSize = file.size.toString();
+      var currentDate = new Date();
+      var options = {
+        timeZone: "Asia/Kolkata"
+      };
+      var formattedDate = currentDate.toLocaleString("en-US", options);
+
+      try {
+        const response = await axios({
+          method: "post",
+          url: `https://api.vimeo.com/me/videos`,
+          headers: headerPost,
+          data: {
+            upload: {
+              approach: "tus",
+              size: fileSize,
+            },
+            name: file.name,
+            upload_date: formattedDate,
+          },
+        });
+        upload = response
+
+        upload1 = new tus.Upload(file, {
+          endPoint: "https://api.vimeo.com/me/videos",
+          uploadUrl: response.data.upload.upload_link,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          metadata: {
+            filetype: file.type,
+          },
+          headers: {},
+          onError: function (error) {
+            console.error("Failed because: " + error);
+          },
+          onProgress: function (bytesUploaded, bytesTotal) {
+            uploadprogress = true
+            progressBarFunction()
+            percentage = ((bytesUploaded / bytesTotal) * 100).toFixed(2)
+            console.log(percentage, '%');
+            function updateDynamicField() {
+              document.getElementById('progressBar').style.width = percentage + '%';
+              document.getElementById('progressBar').innerText = percentage;
+            }
+            setInterval(updateDynamicField, 10);
+            updateDynamicField();
+          },
+          onSuccess: function () {
+            uploadCompleted = true
+          },
+        });
+        upload1.start();
+      } catch (error) {
+        console.error(
+          "Error creating video:",
+          error.response ? error.response.data : error.message
+        );
+        alert(error.response ? error.response.data.error : error.message);
+      }
+    };
+
+    const StoreInDB = async () => {
+      try {
+        var Description = document.getElementById("myTextarea").value;
+        var dateField = document.getElementById("date").value;
+        if (!Description.trim()) {
+          alert("Description is required.")
+          return;
+        }
+        if (!dateField) {
+          alert("dateField is required.")
+          return;
+        }
+        if (!uploadCompleted) {
+          alert("upload in not completed")
+          return;
+        }
+        if (uploadCompleted && dateField && Description) {
+          const parts = upload.data.uri.split("/");
+          const videoID = parts[2];
+          async function sendData() {
+            try {
+              const response = await fetch('/upload', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  videoID,
+                  description: Description,
+                  date: dateField
+                })
+              });
+
+              if (response.ok) {
+                progressBarFunction()
+                console.log('Video data stored in database');
+                alert('Video data stored in database')
+              } else {
+                uploadprogress = false
+                progressBarFunction()
+                console.log('Error while storing video data');
+                alert('Error while storing video data')
+                throw new Error(`HTTP error! Status: ${response.status}`);
+              }
+            } catch (error) {
+              console.error('Error:', error);
+            }
+          }
+          sendData();
+        } else {
+          alert('fill all the fiels ')
+        }
+      } catch (error) {
+        console.error("Error:", error);
+      }
+    };
+  </script>
+</body>
+
+</html>

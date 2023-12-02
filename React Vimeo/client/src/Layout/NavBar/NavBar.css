@@ -1,0 +1,15 @@
+.NavBar-Wrapper {
+  background-color: #173e43;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 50px;
+  color: #fff;
+  margin-bottom: 8%;
+}
+
+.NavBar-Title {
+  font-weight: bolder;
+  font-size: 26px;
+  padding-left: 1rem;
+}
